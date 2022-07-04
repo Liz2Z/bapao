@@ -1,0 +1,7 @@
+[workspace]
+
+members = [
+  "app",
+  "bapao_trans_protocal",
+  "bapao_app_protocal"
+]
