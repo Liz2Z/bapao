@@ -13,12 +13,50 @@ use trans_content::{ReqContent, ResContentType, ResStringContent};
 use trans_unit::TransUnit;
 use uuid::Uuid;
 
+/// Transport protocol listener for Gitee-based communication.
+/// 
+/// `BtpListener` handles the low-level communication with Gitee repositories,
+/// including fetching requests, managing responses, and handling file transfers.
+/// 
+/// # Examples
+/// 
+/// ```rust
+/// use bapao_trans_protocal::BtpListener;
+/// 
+/// #[tokio::main]
+/// async fn main() {
+///     let mut listener = BtpListener::new();
+///     
+///     // Process requests
+///     let requests = listener.accept().await;
+///     for request in requests {
+///         // Handle request and create response
+///         let response = request.set(TransUnitType::String("OK".to_string()));
+///         listener.stash(response);
+///     }
+/// }
+/// ```
 pub struct BtpListener {
     done: Vec<ResStringContent>,
     files: HashMap<String, Vec<u8>>,
 }
 
 impl BtpListener {
+    /// Creates a new `BtpListener` instance.
+    /// 
+    /// Initializes empty storage for completed responses and file data.
+    /// 
+    /// # Returns
+    /// 
+    /// A new `BtpListener` ready to handle transport operations.
+    /// 
+    /// # Examples
+    /// 
+    /// ```rust
+    /// use bapao_trans_protocal::BtpListener;
+    /// 
+    /// let mut listener = BtpListener::new();
+    /// ```
     pub fn new() -> Self {
         BtpListener {
             done: vec![],
@@ -26,7 +64,45 @@ impl BtpListener {
         }
     }
 
-    /// 获取数据
+    /// Fetches new requests from the Gitee repository and returns pending requests.
+    /// 
+    /// This method polls the configured Gitee repository, processes the content,
+    /// and returns any pending requests that need to be handled. It also sends
+    /// any previously stashed responses back to the repository.
+    /// 
+    /// # Returns
+    /// 
+    /// `Vec<TransUnit>` - A vector of pending requests to process
+    /// 
+    /// # Behavior
+    /// 
+    /// - Fetches content from Gitee repository
+    /// - Filters out expired requests (older than 30 minutes)
+    /// - Groups requests by state (Pending/Done)
+    /// - Sends stashed responses to repository
+    /// - Returns only pending requests for processing
+    /// 
+    /// # Examples
+    /// 
+    /// ```rust
+    /// use bapao_trans_protocal::BtpListener;
+    /// 
+    /// #[tokio::main]
+    /// async fn main() {
+    ///     let mut listener = BtpListener::new();
+    ///     
+    ///     loop {
+    ///         let requests = listener.accept().await;
+    ///         
+    ///         for request in requests {
+    ///             println!("Processing: {}", request.get());
+    ///             // Handle request...
+    ///         }
+    ///         
+    ///         tokio::time::sleep(tokio::time::Duration::from_secs(10)).await;
+    ///     }
+    /// }
+    /// ```
     pub async fn accept(&mut self) -> Vec<TransUnit> {
         // 获取gitee数据
         let (trans_content, sha) = gitee_fetch::get_content().await.unwrap_or_else(|err| {
@@ -61,7 +137,43 @@ impl BtpListener {
             .collect()
     }
 
-    /// 暂存数据，但是不发送
+    /// Temporarily stores a response without immediately sending it to Gitee.
+    /// 
+    /// Responses are queued and will be sent to the repository during the next
+    /// `accept()` call. This allows batching multiple responses together for
+    /// more efficient communication.
+    /// 
+    /// # Parameters
+    /// 
+    /// * `value` - The response content to store
+    /// 
+    /// # Behavior
+    /// 
+    /// - String responses are stored directly in the done queue
+    /// - File responses are assigned a UUID filename and stored separately
+    /// - Files will be uploaded to Gitee as separate files
+    /// - String responses will be included in the main communication file
+    /// 
+    /// # Examples
+    /// 
+    /// ```rust
+    /// use bapao_trans_protocal::{BtpListener, trans_content::*};
+    /// 
+    /// let mut listener = BtpListener::new();
+    /// 
+    /// // Stash a string response
+    /// let response = ResContentType::String(ResStringContent {
+    ///     head: TransHead {
+    ///         id: "req_123".to_string(),
+    ///         content_type: Some("string".to_string()),
+    ///         state: "Done".to_string(),
+    ///         timestamp: 1234567890,
+    ///     },
+    ///     body: "Response data".to_string(),
+    /// });
+    /// 
+    /// listener.stash(response);
+    /// ```
     pub fn stash(&mut self, value: ResContentType) -> () {
         match value {
             ResContentType::String(val) => {
