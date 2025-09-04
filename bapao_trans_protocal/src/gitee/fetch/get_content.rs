@@ -33,7 +33,57 @@ struct GiteeResponse {
     sha: String,
 }
 
-/// 请求 gitee 上 io 文件的数据，并返回其内容文本
+/// Fetches content from the configured Gitee repository file.
+/// 
+/// Retrieves the communication file from Gitee, decodes the base64 content,
+/// and parses it as JSON to extract request data.
+/// 
+/// # Returns
+/// 
+/// `Result<(Vec<ReqContent>, String), Box<dyn std::error::Error>>`
+/// 
+/// On success:
+/// * `Vec<ReqContent>` - Parsed request content from the repository
+/// * `String` - Current SHA hash of the file (needed for updates)
+/// 
+/// # Errors
+/// 
+/// * Network connectivity issues
+/// * Authentication failures (invalid access token)
+/// * Repository or file not found
+/// * Base64 decoding errors
+/// * JSON parsing errors
+/// 
+/// # Examples
+/// 
+/// ```rust
+/// use bapao_trans_protocal::gitee::fetch::get_content;
+/// 
+/// #[tokio::main]
+/// async fn main() {
+///     match get_content().await {
+///         Ok((requests, sha)) => {
+///             println!("Found {} requests, SHA: {}", requests.len(), sha);
+///             for req in requests {
+///                 println!("Request: {} -> {}", req.head.id, req.body);
+///             }
+///         },
+///         Err(e) => eprintln!("Failed to fetch: {}", e),
+///     }
+/// }
+/// ```
+/// 
+/// # Configuration Required
+/// 
+/// This function reads from `bapao.config.json` in the project root:
+/// ```json
+/// {
+///   "access_token": "your_gitee_token",
+///   "user_name": "username", 
+///   "repo": "repository_name",
+///   "file_path": "communication_file"
+/// }
+/// ```
 pub async fn get_content() -> Result<(Vec<ReqContent>, String), Box<dyn std::error::Error>> {
     let config: HashMap<String, String> = utils::read_config()?;
 
